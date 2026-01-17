@@ -298,25 +298,7 @@
     color: #4cd137;
 }
 
-/* ========== ADD BUTTON ========== */
-.tmc_add_btn {
-    font-size: 14px;
-    cursor: pointer;
-    margin-left: 6px;
-    opacity: 0.6;
-    transition: all 0.15s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-}
-
-.tmc_add_btn:hover {
-    opacity: 1;
-    background: var(--SmartThemeBlurTintColor);
-}
+/* .tmc_add_btn styles consolidated at top of file (lines 13-36) */
 
 /* ========== SCROLLBAR ========== */
 #tmc_proxy_root::-webkit-scrollbar {
