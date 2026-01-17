@@ -14,7 +14,7 @@
     const defaultSettings = Object.freeze({
         folders: {},
         characterFolders: {},
-        version: '1.2.0'
+        version: '1.2.1'
     });
 
     let isProcessing = false;
@@ -162,7 +162,14 @@
         }
 
         saveSettings();
-        processPopup();
+
+        // Force rebuild by resetting flag
+        const popup = document.querySelector('#shadow_select_chat_popup');
+        if (popup) {
+            popup.dataset.tmcProcessed = 'false';
+        }
+        // Delay to let any observer-triggered changes settle first
+        setTimeout(() => processPopup(), 50);
     }
 
     function getFoldersForCurrentCharacter() {
@@ -513,30 +520,52 @@
     // ========== OBSERVER ==========
 
     function setupObserver() {
+        let observerTimeout = null;
+
         const observer = new MutationObserver((mutations) => {
+            // Skip if we're currently processing or recently processed
+            if (isProcessing) return;
+
+            // Check if any mutations affect our popup
+            let shouldProcess = false;
+
             for (const mutation of mutations) {
+                // Skip mutations from our own elements
+                if (mutation.target.closest?.('.tmc_folder, .tmc_menu')) continue;
+
                 // Check if the chat popup became visible
                 if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                     if (mutation.target.id === 'shadow_select_chat_popup') {
                         mutation.target.dataset.tmcProcessed = 'false';
-                        setTimeout(processPopup, 100);
-                        return;
+                        shouldProcess = true;
+                        break;
                     }
                 }
 
-                // Check for new nodes
+                // Check for popup or chat blocks being added
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === 1) {
-                        if (node.id === 'shadow_select_chat_popup' ||
-                            node.classList?.contains('select_chat_block') ||
-                            node.querySelector?.('.select_chat_block')) {
-                            const popup = document.querySelector('#shadow_select_chat_popup');
-                            if (popup) popup.dataset.tmcProcessed = 'false';
-                            setTimeout(processPopup, 100);
-                            return;
+                        // Skip our own elements
+                        if (node.classList?.contains('tmc_folder') || node.classList?.contains('tmc_menu')) continue;
+
+                        if (node.id === 'shadow_select_chat_popup') {
+                            shouldProcess = true;
+                            break;
                         }
                     }
                 }
+                if (shouldProcess) break;
+            }
+
+            if (shouldProcess) {
+                // Debounce observer-triggered processing
+                clearTimeout(observerTimeout);
+                observerTimeout = setTimeout(() => {
+                    const popup = document.querySelector('#shadow_select_chat_popup');
+                    if (popup && popup.dataset.tmcProcessed !== 'true') {
+                        processPopup();
+                    }
+                }, 150);
             }
         });
 
