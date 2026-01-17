@@ -455,13 +455,13 @@
             const n = prompt('New Folder Name:');
             if (n) createFolder(n);
         };
-
-        // Insert after "Import Chat" button or at the end
-        const importBtn = headerRow.querySelector('#chat_import_button');
-        if (importBtn && importBtn.nextSibling) {
-            headerRow.insertBefore(btn, importBtn.nextSibling);
+        // Insert right after "New Chat" button
+        const newChatBtn = headerRow.querySelector('#newChatFromManageScreenButton');
+        if (newChatBtn && newChatBtn.nextSibling) {
+            headerRow.insertBefore(btn, newChatBtn.nextSibling);
         } else {
-            headerRow.appendChild(btn);
+            // Fallback: insert at beginning
+            headerRow.insertBefore(btn, headerRow.firstChild);
         }
     }
 
