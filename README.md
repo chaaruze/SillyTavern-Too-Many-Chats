@@ -56,6 +56,6 @@ Hover over a folder → Click ✏️ to rename or 🗑️ to delete
 
 <div align="center">
 
-Made with ❤️ by [chaaruze](https://github.com/chaaruze) using [Google Antigravity](https://cloud.google.com)
+Made with ❤️ by [chaaruze](https://github.com/chaaruze) using [Google Antigravity](https://cloud.google.com) :)
 
 </div>
