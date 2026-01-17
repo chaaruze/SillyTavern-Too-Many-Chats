@@ -187,8 +187,9 @@
 
     function scheduleSync() {
         if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
-        // FASTER sync for snappy UI (was 50ms)
-        syncDebounceTimer = setTimeout(performSync, 15);
+        // PERFORMANCE FIX: Increased to 200ms to prevent UI lag
+        // 15ms was too aggressive and caused constant re-rendering
+        syncDebounceTimer = setTimeout(performSync, 200);
     }
 
     function performSync() {
@@ -472,6 +473,10 @@
         observer = new MutationObserver((mutations) => {
             let needsSync = false;
             for (const m of mutations) {
+                // IGNORE our own proxy elements
+                if (m.target.closest && m.target.closest('#tmc_proxy_root')) continue;
+                if (m.target.classList && m.target.classList.contains('tmc_proxy_block')) continue;
+
                 if (m.target.classList?.contains('select_chat_block_wrapper')) {
                     needsSync = true;
                     break;
