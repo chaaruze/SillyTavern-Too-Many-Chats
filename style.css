@@ -6,7 +6,13 @@
 /* Hide native chat list */
 #select_chat_popup .select_chat_block_wrapper,
 #shadow_select_chat_popup .select_chat_block_wrapper {
-    display: none !important;
+    /* DO NOT use display: none, it kills virtualization/rendering in ST */
+    height: 0 !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    visibility: hidden !important;
 }
 
 /* ========== NEW FOLDER BUTTON (Header) ========== */
@@ -55,6 +61,9 @@
     border-radius: 0;
     margin-bottom: 2px;
     flex-shrink: 0;
+    width: 100%;
+    /* Ensure full width */
+    min-width: 100%;
 }
 
 /* Folder Header - Minimal ChatGPT style */
@@ -182,6 +191,10 @@
     cursor: pointer !important;
     transition: background 0.1s, border-color 0.1s !important;
     width: 100% !important;
+    min-width: 100% !important;
+    /* Fix halved display */
+    flex: 0 0 100% !important;
+    /* Fix flex shrinking/sharing */
     box-sizing: border-box !important;
     /* Ensure text wraps nicely */
     white-space: normal !important;
@@ -243,11 +256,29 @@
     white-space: nowrap;
 }
 
-/* ========== UNCATEGORIZED ========== */
+/* Pinned Item */
+.tmc_pinned {
+    background: linear-gradient(90deg, var(--SmartThemeBlurTintColor), transparent);
+    border-left: 2px solid var(--SmartThemeQuoteColor) !important;
+}
+
+/* ========== UNCATEGORIZED & RECENT ========== */
 .tmc_uncat {
     margin-top: 8px;
     border-top: 1px solid var(--SmartThemeBorderColor);
     padding-top: 8px;
+}
+
+.tmc_recent .tmc_header {
+    font-style: italic;
+    /* Distinctive style */
+    opacity: 0.9;
+}
+
+.tmc_recent .tmc_content {
+    /* Limit height of recent folder if it gets too long? */
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .tmc_uncat .tmc_header {
@@ -322,6 +353,74 @@
     opacity: 0.5;
 }
 
+/* ========== BULK ACTIONS ========== */
+#tmc_bulk_bar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--SmartThemeBorderColor);
+    padding: 10px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 9999;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.tmc_bulk_info {
+    font-weight: bold;
+    color: var(--SmartThemeBodyText);
+}
+
+.tmc_bulk_actions {
+    display: flex;
+    gap: 10px;
+}
+
+#tmc_bulk_bar button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBodyText);
+    font-weight: bold;
+}
+
+#tmc_bulk_bar button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#tmc_bulk_cancel {
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor) !important;
+}
+
+.tmc_bulk_check {
+    margin-right: 8px;
+    font-size: 1.1em;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.tmc_selected {
+    background: var(--SmartThemeQuoteColor);
+    border-color: var(--SmartThemeQuoteColor) !important;
+}
+
+.tmc_selected * {
+    color: #fff !important;
+    /* Force readable text on selected */
+}
+
+.tmc_bulk_btn {
+    /* Inherits from tmc_add_btn but maybe specific color? */
+}
+
 /* ========== MOBILE RESPONSIVE ========== */
 @media screen and (max-width: 768px) {
 
@@ -347,6 +446,17 @@
         display: flex !important;
         flex-direction: column !important;
         overflow: hidden !important;
+        overflow: hidden !important;
+        /* Ensure the popup takes full height */
+        height: 100% !important;
+        max-height: 100vh !important;
+
+        /* Remove any shadow/mask that causes the "halved" blue blur */
+        box-shadow: none !important;
+        mask-image: none !important;
+        -webkit-mask-image: none !important;
+        backdrop-filter: blur(10px) !important;
+        /* Keep blur, lose the gradient/shadow */
     }
 
     /* Shadow backdrop - also needs to be fullscreen */
@@ -361,14 +471,15 @@
         margin: 0 !important;
     }
 
-    /* Proxy root - Flex grow to fill space */
+    /* Ensure the proxy root grows to fill the space and scrolls internally */
     #tmc_proxy_root {
         flex: 1 1 auto !important;
+        height: auto !important;
         min-height: 0 !important;
-        max-height: none !important;
+        /* Critical for flex scrolling */
         overflow-y: auto !important;
-        overflow-x: hidden !important;
-        padding: 8px !important;
+        width: 100% !important;
+        display: block !important;
     }
 
     /* Folder headers - larger touch targets */
@@ -426,17 +537,74 @@
 /* Extra small screens (phones in portrait) */
 @media screen and (max-width: 480px) {
 
-    /* Inherit height from the 768px query - removed 70vh cap */
-    #tmc_proxy_root {
-        max-height: none !important;
+    /* Inherit height from the 768px query    /* Folder Sections */
+    .tmc_section {
+        margin-bottom: 0 !important;
+        border-bottom: 1px solid var(--SmartThemeBorderColor) !important;
+    }
+
+    .tmc_header {
+        padding: 12px 10px !important;
+        /* Comfortable touch target */
+        margin: 0 !important;
+        background: transparent !important;
     }
 
     .tmc_content {
-        padding-left: 8px !important;
+        padding-left: 0 !important;
     }
 
     /* Stack date info below filename on very small screens */
     .tmc_proxy_block.select_chat_block .select_chat_info {
         font-size: 11px !important;
     }
+
+    /* Force full width on EVERYTHING in the list */
+    #tmc_proxy_root * {
+        box-sizing: border-box !important;
+    }
+
+    .tmc_section,
+    .tmc_proxy_block.select_chat_block {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin-left: -10px !important;
+        /* Counteract padding if needed */
+        margin-right: -10px !important;
+        border-radius: 0 !important;
+        flex: 0 0 100% !important;
+    }
+}
+
+/* Fix for Search Button Squishing */
+/* Allow the header controls to wrap if they run out of space */
+[name="selectChatPopupHeader"] {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    height: auto !important;
+    padding-bottom: 4px !important;
+    min-height: auto !important;
+    position: relative !important;
+    z-index: 10 !important;
+    /* Ensure header stays above content */
+}
+
+/* Ensure generic inputs (search) don't get crushed */
+#select_chat_popup input[type="text"],
+#select_chat_popup input[type="search"] {
+    min-width: 0 !important;
+    /* Allow shrinking if needed */
+    width: 100% !important;
+    /* But prefer full width on mobile */
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    margin: 4px 0 !important;
+    /* Add spacing if wrapped */
+}
+
+/* Ensure the buttons don't shrink to zero */
+.tmc_add_btn,
+#newChatFromManageScreenButton,
+#importChatButton {
+    flex-shrink: 0 !important;
 }

@@ -15,11 +15,36 @@
     const defaultSettings = Object.freeze({
         folders: {},
         characterFolders: {},
-        version: '1.0.0'
+        pinned: {},
+        showRecent: true,
+        version: '1.1.0'
     });
 
     let observer = null;
     let syncDebounceTimer = null;
+    let bulkMode = false;
+    let selectedChats = new Set();
+    // Helper to clear selection
+    function clearSelection() {
+        selectedChats.clear();
+        bulkMode = false;
+        updateBulkBar();
+        scheduleSync();
+    }
+
+    // ========== STYLES ==========
+    // Extended to support raw hexes in logic
+    const FOLDER_COLORS = {
+        'red': '#ff6b6b',
+        'orange': '#ffa94d',
+        'yellow': '#ffec99',
+        'green': '#69db7c',
+        'blue': '#4dabf7',
+        'purple': '#b197fc',
+        'pink': '#fcc2d7',
+        'default': 'transparent'
+    };
+
 
     // ========== SETTINGS ==========
 
@@ -123,6 +148,34 @@
             saveSettings();
             scheduleSync();
         }
+    }
+
+    function setFolderColor(folderId, colorKeyOrHex) {
+        const settings = getSettings();
+        if (settings.folders[folderId]) {
+            // Check if it's a key in FOLDER_COLORS, otherwise treat as hex
+            if (FOLDER_COLORS[colorKeyOrHex]) {
+                settings.folders[folderId].color = colorKeyOrHex;
+            } else {
+                // It is a hex from picker
+                settings.folders[folderId].color = colorKeyOrHex;
+            }
+            saveSettings();
+            scheduleSync();
+        }
+    }
+
+    function togglePin(fileName) {
+        const settings = getSettings();
+        if (!settings.pinned) settings.pinned = {};
+
+        if (settings.pinned[fileName]) {
+            delete settings.pinned[fileName];
+        } else {
+            settings.pinned[fileName] = true;
+        }
+        saveSettings();
+        scheduleSync();
     }
 
     function deleteFolder(folderId) {
@@ -247,8 +300,20 @@
                 return;
             }
 
-            const folderIds = settings.characterFolders[characterId] || [];
+            if (!characterId) {
+                proxyRoot.innerHTML = '<div style="padding:12px;opacity:0.6">Select a character</div>';
+                return;
+            }
+
             const folderContents = {};
+            const folderIds = settings.characterFolders[characterId] || [];
+
+            // SMART FOLDER: Recent
+            if (settings.showRecent !== false) {
+                const recentSection = createRecentDOM();
+                newTree.appendChild(recentSection);
+                folderContents['recent'] = recentSection.querySelector('.tmc_content');
+            }
 
             folderIds.forEach(fid => {
                 const folder = settings.folders[fid];
@@ -263,10 +328,29 @@
             folderContents['uncategorized'] = uncatSection.querySelector('.tmc_content');
 
             chatData.forEach(chat => {
+                const isPinned = settings.pinned && settings.pinned[chat.fileName];
+
+                // 1. Regular Folder Logic
                 const fid = getFolderForChat(chat.fileName);
                 const container = folderContents[fid] || folderContents['uncategorized'];
-                const proxy = createProxyBlock(chat);
-                container.appendChild(proxy);
+                const proxy = createProxyBlock(chat, isPinned);
+
+                if (isPinned) {
+                    // Pinned items go to the top
+                    container.insertBefore(proxy, container.firstChild);
+                } else {
+                    container.appendChild(proxy);
+                }
+
+                // 2. Smart Recent Logic (Cloned item)
+                if (folderContents['recent']) {
+                    if (chat.date === 'Today' || chat.date === 'Yesterday') {
+                        const recentProxy = createProxyBlock(chat, isPinned);
+                        // Differentiate ID to avoid dupes if we used IDs (we don't)
+                        recentProxy.classList.add('tmc_recent_clone');
+                        folderContents['recent'].appendChild(recentProxy);
+                    }
+                }
             });
 
             Object.keys(folderContents).forEach(fid => {
@@ -308,10 +392,48 @@
                 <span class="tmc_count">0</span>
             </div>
             <div class="tmc_header_right">
+                <span class="tmc_btn tmc_color" title="Color"><i class="fa-solid fa-palette"></i></span>
                 <span class="tmc_btn tmc_edit" title="Rename"><i class="fa-solid fa-pencil"></i></span>
                 <span class="tmc_btn tmc_del" title="Delete"><i class="fa-solid fa-trash"></i></span>
             </div>
         `;
+
+        // Apply Color
+        if (folder.color) {
+            // It could be a key or a raw hex
+            const c = FOLDER_COLORS[folder.color] || folder.color;
+            if (c && c !== 'transparent') {
+                header.style.borderLeft = `4px solid ${c}`;
+                header.style.background = `${c}22`; // Low opacity background
+            }
+        }
+
+        // Hidden color input - must use visibility:hidden, not display:none for clicks to work reliably
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.style.cssText = 'visibility: hidden; position: absolute; width: 0; height: 0; pointer-events: none;';
+        colorInput.value = (folder.color && FOLDER_COLORS[folder.color] && FOLDER_COLORS[folder.color] !== 'transparent')
+            ? FOLDER_COLORS[folder.color]
+            : '#ffffff';
+
+        section.appendChild(colorInput);
+
+        header.querySelector('.tmc_color').onclick = (e) => {
+            e.stopPropagation();
+            colorInput.click();
+        };
+
+        colorInput.onchange = (e) => {
+            // WE need to save the custom HEX or map it to closest? 
+            // The prompt asked for keys (red, blue). 
+            // User requested "picker". 
+            // We should support custom hexes in setFolderColor now.
+            // But FOLDER_COLORS is a map.
+            // Let's modify setFolderColor to handle direct hex or extend the map?
+            // Easiest: Just use the hex directly if it doesn't match a key.
+            const val = e.target.value;
+            setFolderColor(fid, val);
+        };
 
         header.querySelector('.tmc_header_left').onclick = () => {
             const s = getSettings();
@@ -365,15 +487,69 @@
         return section;
     }
 
+    function createRecentDOM() {
+        const section = document.createElement('div');
+        section.className = 'tmc_section tmc_recent';
+        // Virtual ID, not in settings (unless we want to save collapse state later)
+        section.dataset.id = 'recent';
+
+        const header = document.createElement('div');
+        header.className = 'tmc_header';
+        header.innerHTML = `
+            <div class="tmc_header_left">
+                <span class="tmc_icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                <span class="tmc_name">Recent</span>
+                <span class="tmc_count">0</span>
+            </div>
+        `;
+
+        const content = document.createElement('div');
+        content.className = 'tmc_content';
+
+        section.appendChild(header);
+        section.appendChild(content);
+        return section;
+    }
+
     // Proxy block with FULL native content (buttons, preview, etc.)
-    function createProxyBlock(chatData) {
+    // Proxy block with FULL native content (buttons, preview, etc.)
+    function createProxyBlock(chatData, isPinned) {
         const el = document.createElement('div');
         el.className = 'select_chat_block tmc_proxy_block';
+        if (isPinned) el.classList.add('tmc_pinned');
 
         // Use full native HTML content (includes preview, buttons, etc.)
         el.innerHTML = chatData.html;
         el.title = chatData.fileName;
         el.setAttribute('file_name', chatData.fileName);
+
+        // Render Pin Visual
+        if (isPinned) {
+            const pinIcon = document.createElement('span');
+            pinIcon.className = 'tmc_pin_icon';
+            pinIcon.innerHTML = '📌';
+            pinIcon.style.cssText = 'font-size: 12px; margin-right: 5px; opacity: 0.8;';
+
+            // Insert before title or at start
+            const titleEl = el.querySelector('.select_chat_block_title') || el.querySelector('.avatar_title_div');
+            if (titleEl) {
+                titleEl.prepend(pinIcon);
+            } else {
+                el.prepend(pinIcon);
+            }
+        }
+
+        // BULK MODE VISUALS
+        if (bulkMode) {
+            const check = document.createElement('div');
+            check.className = 'tmc_bulk_check';
+            check.innerHTML = selectedChats.has(chatData.fileName) ? '<i class="fa-solid fa-square-check"></i>' : '<i class="fa-regular fa-square"></i>';
+            el.prepend(check);
+
+            if (selectedChats.has(chatData.fileName)) {
+                el.classList.add('tmc_selected');
+            }
+        }
 
         // FIX: Move pencil icon to the right side with other action buttons
         const pencilBtn = el.querySelector('.renameChatButton');
@@ -385,23 +561,39 @@
             actionContainer.insertBefore(pencilBtn, actionContainer.firstChild);
         }
 
+
+
         // Intercept main click (not on buttons)
         el.addEventListener('click', (e) => {
             // Don't intercept if clicking on action buttons
             if (e.target.closest('.renameChatButton, .select_chat_block_action, .mes_edit, .mes_delete, .mes_export, button, a, [class*="export"], [class*="delete"], [class*="download"]')) {
-                // Find corresponding button in hidden original and click it
+                // ... existing button logic
                 const clickedClass = e.target.closest('[class]')?.className;
                 if (clickedClass) {
                     const originalBtn = chatData.element.querySelector('.' + clickedClass.split(' ')[0]);
-                    if (originalBtn) {
-                        originalBtn.click();
-                        return;
-                    }
+                    if (originalBtn) originalBtn.click();
                 }
+                return;
             }
+
+            // BULK MODE LOGIC
+            if (bulkMode) {
+                e.stopPropagation();
+                e.preventDefault();
+                if (selectedChats.has(chatData.fileName)) {
+                    selectedChats.delete(chatData.fileName);
+                } else {
+                    selectedChats.add(chatData.fileName);
+                }
+                scheduleSync(); // Re-render to show selection
+                updateBulkBar();
+                return;
+            }
+
             // Otherwise load the chat
             chatData.element.click();
         });
+
 
         el.oncontextmenu = (e) => {
             e.preventDefault();
@@ -424,43 +616,141 @@
             return;
         }
 
+        // New Folder Button
         const btn = document.createElement('div');
         btn.className = 'tmc_add_btn';  // Remove menu_button to avoid conflicts
         btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i> New Folder';
         btn.title = 'Create New Folder';
-        // Apply full inline styles to ensure they work regardless of specificity
-        // Styles are now handled in style.css
 
         btn.onclick = (e) => {
             e.stopPropagation();
             const n = prompt('New Folder Name:');
             if (n) createFolder(n);
         };
+
+        // Bulk Select Button
+        const bulkBtn = document.createElement('div');
+        bulkBtn.className = 'tmc_add_btn tmc_bulk_btn';
+        bulkBtn.innerHTML = '<i class="fa-solid fa-list-check"></i> Select';
+        bulkBtn.title = 'Select Multiple Chats';
+        bulkBtn.onclick = (e) => {
+            e.stopPropagation();
+            bulkMode = !bulkMode;
+            if (!bulkMode) selectedChats.clear();
+            scheduleSync();
+            updateBulkBar();
+        };
+
         // Insert right after "New Chat" button
         const newChatBtn = headerRow.querySelector('#newChatFromManageScreenButton');
         if (newChatBtn && newChatBtn.nextSibling) {
-            headerRow.insertBefore(btn, newChatBtn.nextSibling);
+            headerRow.insertBefore(bulkBtn, newChatBtn.nextSibling);
+            headerRow.insertBefore(btn, bulkBtn);
         } else {
             // Fallback: insert at beginning
-            headerRow.insertBefore(btn, headerRow.firstChild);
+            headerRow.insertBefore(bulkBtn, headerRow.firstChild);
+            headerRow.insertBefore(btn, bulkBtn);
         }
+    }
+
+    function updateBulkBar() {
+        let bar = document.querySelector('#tmc_bulk_bar');
+        if (!bulkMode) {
+            if (bar) bar.remove();
+            return;
+        }
+
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'tmc_bulk_bar';
+            document.body.appendChild(bar);
+        }
+
+        const count = selectedChats.size;
+        bar.innerHTML = `
+            <div class="tmc_bulk_info">${count} Selected</div>
+            <div class="tmc_bulk_actions">
+                <button id="tmc_bulk_move" ${count === 0 ? 'disabled' : ''}><i class="fa-solid fa-folder-open"></i> Move</button>
+                <button id="tmc_bulk_del" ${count === 0 ? 'disabled' : ''} style="background:var(--SmartThemeRed);color:#fff;"><i class="fa-solid fa-trash"></i> Delete</button>
+                <button id="tmc_bulk_cancel">Cancel</button>
+            </div>
+        `;
+
+        bar.querySelector('#tmc_bulk_cancel').onclick = clearSelection;
+
+        bar.querySelector('#tmc_bulk_move').onclick = (e) => {
+            if (count === 0) return;
+            // Hacky: reuse render context menu logic but for bulk
+            // We pass a dummy event to position it center or just list folders
+            showContextMenu(e, null, true); // true = bulk mode
+        };
+
+        bar.querySelector('#tmc_bulk_del').onclick = async (e) => {
+            if (count === 0) return;
+            if (!confirm(`Delete ${count} chats? You may need to confirm native popups for each.`)) return;
+
+            // Iterate and trigger native delete
+            // We need to find the NATIVE blocks, not our proxies
+            const popup = document.querySelector('#shadow_select_chat_popup') || document.querySelector('#select_chat_popup');
+            if (!popup) return;
+
+            const nativeBlocks = Array.from(popup.querySelectorAll('.select_chat_block:not(.tmc_proxy_block)'));
+
+            for (const fileName of selectedChats) {
+                const block = nativeBlocks.find(b => {
+                    const f = b.getAttribute('file_name') || b.title;
+                    return f === fileName || (b.innerText && b.innerText.includes(fileName));
+                });
+                if (block) {
+                    const delBtn = block.querySelector('.mes_delete, [class*="delete"]');
+                    if (delBtn) {
+                        delBtn.click();
+                        // Small delay to let UI process if needed, though native confirm usually blocks
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                }
+            }
+            clearSelection();
+        };
     }
 
     // ========== CONTEXT MENU ==========
 
-    function showContextMenu(e, fileName) {
+    // ========== CONTEXT MENU ==========
+
+    function showContextMenu(e, fileName, isBulk = false) {
         document.querySelectorAll('.tmc_ctx').forEach(m => m.remove());
 
         const menu = document.createElement('div');
         menu.className = 'tmc_ctx';
-        menu.style.top = e.pageY + 'px';
-        menu.style.left = e.pageX + 'px';
+
+        // Position centering if bulk
+        if (isBulk) {
+            menu.style.top = '50%';
+            menu.style.left = '50%';
+            menu.style.transform = 'translate(-50%, -50%)';
+            menu.style.position = 'fixed';
+            menu.style.maxHeight = '80vh';
+            menu.style.overflowY = 'auto';
+        } else {
+            menu.style.top = e.pageY + 'px';
+            menu.style.left = e.pageX + 'px';
+        }
 
         const settings = getSettings();
         const characterId = getCurrentCharacterId();
         const folderIds = settings.characterFolders[characterId] || [];
 
-        let html = '<div class="tmc_ctx_head">Move to</div>';
+        let html = '<div class="tmc_ctx_head">' + (isBulk ? `Move ${selectedChats.size} chats to...` : 'Actions') + '</div>';
+
+        if (!isBulk) {
+            // Pin option
+            const pinText = (getSettings().pinned && getSettings().pinned[fileName]) ? 'Unpin' : 'Pin to top';
+            html += `<div class="tmc_ctx_item" data-action="pin">📌 ${pinText}</div>`;
+            html += '<div class="tmc_ctx_sep"></div>';
+            html += '<div class="tmc_ctx_head">Move to</div>';
+        }
+
         folderIds.forEach(fid => {
             const f = settings.folders[fid];
             html += `<div class="tmc_ctx_item" data-fid="${fid}">📁 ${escapeHtml(f.name)}</div>`;
@@ -468,20 +758,31 @@
         html += '<div class="tmc_ctx_sep"></div>';
         html += '<div class="tmc_ctx_item" data-fid="uncategorized">💬 Your chats</div>';
 
-
         menu.innerHTML = html;
         document.body.appendChild(menu);
 
         menu.onclick = (ev) => {
             const item = ev.target.closest('.tmc_ctx_item');
             if (!item) return;
-            // Only "Move to folder" actions remain
-            moveChat(fileName, item.dataset.fid);
+
+            if (isBulk) {
+                const targetFid = item.dataset.fid;
+                selectedChats.forEach(file => moveChat(file, targetFid));
+                clearSelection();
+            } else {
+                if (item.dataset.action === 'pin') {
+                    togglePin(fileName);
+                } else {
+                    moveChat(fileName, item.dataset.fid);
+                }
+            }
             menu.remove();
         };
 
         setTimeout(() => {
-            document.addEventListener('click', () => menu.remove(), { once: true });
+            document.addEventListener('click', (ev) => {
+                if (!menu.contains(ev.target)) menu.remove();
+            }, { once: true });
         }, 50);
     }
 
