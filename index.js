@@ -20,6 +20,7 @@
 
     let observer = null;
     let syncDebounceTimer = null;
+    let userOpenedPanel = false;  // Track if user intentionally opened the panel
 
     // ========== SETTINGS ==========
 
@@ -192,6 +193,9 @@
     }
 
     function performSync() {
+        // Only sync if user has opened the panel
+        if (!userOpenedPanel) return;
+
         try {
             const popups = [
                 document.querySelector('#shadow_select_chat_popup'),
@@ -517,7 +521,7 @@
                     }
                 }
             }
-            if (needsSync) scheduleSync();
+            if (needsSync && userOpenedPanel) scheduleSync();
         });
 
         observer.observe(document.body, {
@@ -536,10 +540,18 @@
 
         ctx.eventSource.on(ctx.event_types.CHAT_CHANGED, scheduleSync);
 
+        // Listen for user opening chat history popup
+        document.addEventListener('click', (e) => {
+            const manageBtn = e.target.closest('#option_select_chat, [onclick*="select_chat"], .mes_button[title*="Chat"], [data-i18n="Manage"]');
+            if (manageBtn) {
+                userOpenedPanel = true;
+            }
+        }, true);
+
         // Heartbeat: check for empty folders or missing proxy root
         setInterval(() => {
             const popup = document.querySelector('#shadow_select_chat_popup') || document.querySelector('#select_chat_popup');
-            if (popup && getComputedStyle(popup).display !== 'none') {
+            if (userOpenedPanel && popup && getComputedStyle(popup).display !== 'none') {
                 const proxy = popup.querySelector('#tmc_proxy_root');
                 const nativeBlocks = popup.querySelectorAll('.select_chat_block:not(.tmc_proxy_block)');
                 const proxyBlocks = popup.querySelectorAll('.tmc_proxy_block');
