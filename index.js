@@ -88,48 +88,6 @@
         return fileName.replace(/\.jsonl$/i, '').trim() || 'Untitled';
     }
 
-    // MOBILE FULLSCREEN: Inject styles directly via JavaScript
-    function applyMobileFullscreen() {
-        // Only apply on mobile-width viewports
-        if (window.innerWidth > 768) return;
-
-        const popup = document.querySelector('#select_chat_popup');
-        const shadow = document.querySelector('#shadow_select_chat_popup');
-
-        if (popup && popup.style) {
-            popup.style.setProperty('position', 'fixed', 'important');
-            popup.style.setProperty('top', '0', 'important');
-            popup.style.setProperty('left', '0', 'important');
-            popup.style.setProperty('right', '0', 'important');
-            popup.style.setProperty('bottom', '0', 'important');
-            popup.style.setProperty('width', '100vw', 'important');
-            popup.style.setProperty('height', '100vh', 'important');
-            popup.style.setProperty('max-width', '100vw', 'important');
-            popup.style.setProperty('max-height', '100vh', 'important');
-            popup.style.setProperty('margin', '0', 'important');
-            popup.style.setProperty('inset', '0', 'important');
-            popup.style.setProperty('transform', 'none', 'important');
-            popup.style.setProperty('border-radius', '0', 'important');
-            popup.style.setProperty('z-index', '99999', 'important');
-        }
-
-        if (shadow && shadow.style) {
-            shadow.style.setProperty('position', 'fixed', 'important');
-            shadow.style.setProperty('top', '0', 'important');
-            shadow.style.setProperty('left', '0', 'important');
-            shadow.style.setProperty('width', '100vw', 'important');
-            shadow.style.setProperty('height', '100vh', 'important');
-            shadow.style.setProperty('display', 'block', 'important');
-        }
-
-        const proxyRoot = document.querySelector('#tmc_proxy_root');
-        if (proxyRoot && proxyRoot.style) {
-            proxyRoot.style.setProperty('flex', '1 1 auto', 'important');
-            proxyRoot.style.setProperty('max-height', 'none', 'important');
-            proxyRoot.style.setProperty('overflow-y', 'auto', 'important');
-        }
-    }
-
 
     function createFolder(name) {
         if (!name || !name.trim()) return;
@@ -242,9 +200,6 @@
 
             const popup = popups.find(p => p && getComputedStyle(p).display !== 'none');
             if (!popup) return;
-
-            // Apply mobile fullscreen styles via JavaScript
-            applyMobileFullscreen();
 
             const nativeBlocks = Array.from(popup.querySelectorAll('.select_chat_block:not(.tmc_proxy_block)'));
 
